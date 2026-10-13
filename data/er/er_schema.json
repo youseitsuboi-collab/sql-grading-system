@@ -1,0 +1,126 @@
+{
+  "tables": {
+    "大会概要": {
+      "primary_key": ["回数"],
+      "columns": {
+        "回数": {
+          "type": "INT",
+          "description": "大会回数"
+        },
+        "年次": {
+          "type": "CHAR",
+          "description": "開催年"
+        },
+        "参加校数": {
+          "type": "INT",
+          "description": "参加校数"
+        },
+        "開催地": {
+          "type": "CHAR",
+          "description": "開催地"
+        },
+        "入場者総数": {
+          "type": "INT",
+          "description": "大会全体の入場者数"
+        }
+      }
+    },
+
+    "代表校": {
+      "primary_key": ["県", "回数"],
+      "columns": {
+        "県": {
+          "type": "CHAR",
+          "description": "都道府県"
+        },
+        "回数": {
+          "type": "INT",
+          "description": "大会回数"
+        },
+        "校名": {
+          "type": "CHAR",
+          "description": "高校名"
+        }
+      }
+    },
+
+    "試合種別": {
+      "primary_key": ["種別"],
+      "columns": {
+        "種別": {
+          "type": "CHAR",
+          "description": "決勝など"
+        },
+        "優先度": {
+          "type": "INT",
+          "description": "試合順"
+        }
+      }
+    },
+
+    "試合結果": {
+      "primary_key": ["勝者", "敗者", "回数", "種別"],
+      "columns": {
+        "勝者": {
+          "type": "CHAR",
+          "description": "勝利校"
+        },
+        "敗者": {
+          "type": "CHAR",
+          "description": "敗北校"
+        },
+        "回数": {
+          "type": "INT",
+          "description": "大会回数"
+        },
+        "種別": {
+          "type": "CHAR",
+          "description": "試合種別"
+        },
+        "得点1": {
+          "type": "INT",
+          "description": "勝者側得点"
+        },
+        "得点2": {
+          "type": "INT",
+          "description": "敗者側得点"
+        },
+        "引き分け": {
+          "type": "BIT",
+          "description": "引き分け判定"
+        },
+        "備考": {
+          "type": "CHAR",
+          "description": "補足"
+        }
+      }
+    }
+  },
+
+  "relations": [
+    {
+      "from": "代表校.回数",
+      "to": "大会概要.回数"
+    },
+
+    {
+      "from": "試合結果.回数",
+      "to": "大会概要.回数"
+    },
+
+    {
+      "from": "試合結果.種別",
+      "to": "試合種別.種別"
+    },
+
+    {
+      "from": "試合結果.勝者",
+      "to": "代表校.県"
+    },
+
+    {
+      "from": "試合結果.敗者",
+      "to": "代表校.県"
+    }
+  ]
+}

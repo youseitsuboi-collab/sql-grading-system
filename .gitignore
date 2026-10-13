@@ -1,0 +1,40 @@
+# API keys and environment variables
+.env
+.env.*
+.streamlit/secrets.toml
+*.pem
+*.key
+
+# Student reports and generated results
+data/*
+!data/er/
+!data/model/
+!data/new_spj_markdown/
+
+data/er/*
+!data/er/er_schema.json
+!data/er/er_schema_2026.json
+
+data/model/*
+!data/model/week4_model_2026.json
+!data/model/week4_existing_queries_2026.json
+
+data/new_spj_markdown/*
+!data/new_spj_markdown/model_answer.md
+
+# Temporary and generated files
+__pycache__/
+*.pyc
+outputs/
+cloudflared
+*.log
+
+# Local development files
+.venv/
+venv/
+
+# Legacy scripts containing API keys
+new_grader_spj.py
+test_grader_agg.py
+test_grader_project.py
+test_grader_spj.py
