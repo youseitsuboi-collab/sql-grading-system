@@ -42,8 +42,7 @@ def load_model_answers():
 def call_gpt_json(system_prompt, user_prompt):
 
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        temperature=0,
+        model="gpt-5.4-mini",
         response_format={
             "type": "json_object"
         },
