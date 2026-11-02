@@ -30,8 +30,16 @@ def read_docx(file_path: str) -> str:
         # 表
         elif isinstance(block, Table):
             for row in block.rows:
-                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                if cells:
+                cells = [cell.text.strip() for cell in row.cells]
+
+                # クエリ設計フォームの回答欄が空欄の場合
+                if len(cells) == 2:
+                    field_name, answer = cells
+
+                    if field_name and not answer:
+                        cells[1] = "【未記入】"
+
+                if any(cells):
                     texts.append("\n".join(cells))
 
     return "\n".join(texts)

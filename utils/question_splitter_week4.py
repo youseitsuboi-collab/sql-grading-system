@@ -166,16 +166,24 @@ def extract_fields(lines: List[str]) -> Dict[str, str]:
 def parse_query_block(block: str) -> Dict:
     """
     1つのクエリ設計を構造化する。
+    未記入の項目も検出する。
     """
 
     lines = clean_lines(block)
+    fields = extract_fields(lines)
+
+    missing_fields = [
+        field_name
+        for field_name, value in fields.items()
+        if not value.strip() or value.strip() == "【未記入】"
+    ]
 
     return {
         "query_type": detect_query_type(lines),
         "query_name": extract_query_name(lines),
-        "fields": extract_fields(lines),
+        "fields": fields,
+        "missing_fields": missing_fields,
     }
-
 
 # ==================================================
 # 課題2
