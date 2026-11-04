@@ -42,7 +42,7 @@ def load_model_answers():
 def call_gpt_json(system_prompt, user_prompt):
 
     response = client.chat.completions.create(
-        model="gpt-6.1-terra",
+        model="gpt-6.1-sol",
         response_format={
             "type": "json_object"
         },
