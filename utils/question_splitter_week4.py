@@ -127,39 +127,66 @@ def extract_query_name(lines: List[str]) -> str:
 
 
 def extract_fields(lines: List[str]) -> Dict[str, str]:
-    """
-    使用テーブル、結合条件、選択条件などを抽出する。
-    """
-
+    """複数項目が同一行にある形式・別名表記にも対応する。"""
     fields = {}
-
     current_field = None
-    current_values = []
+    values = []
+
+    aliases = {
+        "グループ化": "行見出し",
+        "選択条件 集計後": "選択条件（集計後）",
+        "選択条件 集計前": "選択条件（集計前）",
+    }
+    names = sorted(set(ALL_FIELDS) | set(aliases), key=len, reverse=True)
+    # ラベルの直後はコロン、または「並べ替え条件なし」の形式。
+    label_re = re.compile(
+        r"(?<![\w一-龥])(" + "|".join(map(re.escape, names)) +
+        r")(?:[ \t]*[:：][ \t]*|[ \t]{2,}|(?=$))"
+    )
+    no_sort_re = re.compile(r"^並べ替え条件\s*なし$")
+    unknown_heading_re = re.compile(
+        r"^(?:クエリーの種類|設計方針|サブクエリーの条件|クエリー名)\s*[:：]"
+    )
+
+    def save():
+        if current_field is not None:
+            value = "\n".join(values).strip()
+            if value:
+                fields[current_field] = value
 
     for line in lines:
+        line = line.strip()
+        # Wordのセル結合で「なし選択条件」のようにラベルが連結される場合。
+        line = re.sub(r"なし(?=(?:選択条件(?:（集計前）|（集計後）)?|結合条件|行見出し|列見出し|集計方法|射影属性|並べ替え条件)\s*[:：])", "なし ", line)
+        if no_sort_re.fullmatch(line):
+            save()
+            current_field = "並べ替え条件"
+            values = ["なし"]
+            continue
+        if unknown_heading_re.match(line):
+            save()
+            current_field = None
+            values = []
+            continue
 
-        if line in ALL_FIELDS:
+        matches = list(label_re.finditer(line))
+        if matches:
+            save()
+            for i, match in enumerate(matches):
+                key = aliases.get(match.group(1), match.group(1))
+                stop = matches[i + 1].start() if i + 1 < len(matches) else len(line)
+                value = line[match.end():stop].strip()
+                # 後続項目を同じフィールドに連結しない。
+                if i == len(matches) - 1:
+                    current_field = key
+                    values = [value] if value else []
+                elif value:
+                    fields[key] = value
+            continue
 
-            if current_field is not None:
-
-                fields[current_field] = "\n".join(
-                    current_values
-                ).strip()
-
-            current_field = line
-            current_values = []
-
-        else:
-
-            if current_field is not None:
-                current_values.append(line)
-
-    if current_field is not None:
-
-        fields[current_field] = "\n".join(
-            current_values
-        ).strip()
-
+        if current_field is not None:
+            values.append(line)
+    save()
     return fields
 
 
@@ -206,37 +233,36 @@ def split_assignment2(text: str) -> Dict[str, Dict]:
     if assignment4_match:
         target = text[:assignment4_match.start()]
     else:
-        target = text
+        # 課題4の大見出しが省略され、4-1から始まる提出にも対応。
+        # 課題2の範囲を4-1より前に限定する。
+        first_project = re.search(
+            r"(?m)^[ \t]*4[ \t]*[-－ー][ \t]*1[ \t]*[:：][ \t]*[^\n]+",
+            text,
+        )
+        target = text[:first_project.start()] if first_project else text
 
+    # 2-1 SQL1 / 2-1：SPJクエリー / 2-7a：SPJクエリー を認識。
+    # 行頭だけを対象にし、本文中のSQL番号を誤認しない。
     pattern = re.compile(
-        r"^\s*(?:2-\d+\s*[:：]?\s*)?"
-        r"SQL\s*([1-8])\b",
-        re.MULTILINE | re.IGNORECASE
+        r"^[^\S\n]*(?:2[\s]*[-－ー][\s]*([1-8])([a-zA-Z]?)[^\S\n]*[:：]?[^\S\n]*(?:SQL[\s]*[1-8]\b|(?:SPJ|集計|不一致|入れ子|ユニオン|重複|SQL)[^\n]*?クエリ(?:ー)?|[^\n]*?クエリ(?:ー)?)|SQL[\s]*([1-8])\b)",
+        re.MULTILINE | re.IGNORECASE,
     )
-
     matches = list(pattern.finditer(target))
-
     results = {}
-
+    segments = {}
     for i, match in enumerate(matches):
+        q_num = match.group(1) or match.group(3)
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(target)
+        block = target[match.start():end].strip()
+        segments.setdefault(f"SQL{q_num}", []).append(block)
 
-        q_num = match.group(1)
-
-        start = match.start()
-
-        if i + 1 < len(matches):
-            end = matches[i + 1].start()
-        else:
-            end = len(target)
-
-        block = target[start:end].strip()
-
+    for key, blocks in segments.items():
+        # SQL7/8は補助クエリーと最終クエリーをまとめて採点器に渡す。
+        # 既存のgraderがrawを参照できるよう全ブロックを保持する。
+        block = "\n".join(blocks)
         parsed = parse_query_block(block)
-
-        # 元データも保持
         parsed["raw"] = block
-
-        results[f"SQL{q_num}"] = parsed
+        results[key] = parsed
 
     return results
 
@@ -247,12 +273,12 @@ def split_assignment2(text: str) -> Dict[str, Dict]:
 
 def extract_project_intent(block: str) -> str:
     """企画意図から、クエリー名・設計項目・SQL文の直前までを取得。"""
-    match = re.search(r"^[ \t]*企画意図[ \t]*[:：]?[ \t]*$", block, re.MULTILINE)
+    match = re.search(r"^[ \t]*[・-]?[ \t]*企画意図[ \t]*[:：]?[ \t]*$", block, re.MULTILINE)
     if not match:
         return ""
     remainder = block[match.end():]
     end = re.search(
-        r"^[ \t]*(?:クエリー設計|クエリ設計|クエリー名[ \t]*[:：]|使用テーブル[ \t]*$|SQL[ \t]*文[ \t]*$)",
+        r"^[ \t]*[・-]?[ \t]*(?:クエリー設計|クエリ設計|クエリー名[ \t]*[:：]|使用テーブル[ \t]*(?:[:：]|$)|SQL[ \t]*文[ \t]*$)",
         remainder, re.MULTILINE
     )
     return (remainder[:end.start()] if end else remainder).strip()
@@ -261,7 +287,7 @@ def extract_project_intent(block: str) -> str:
 def extract_project_design(block: str) -> str:
     """クエリー設計の見出しがなくてもクエリー名以降を取得。"""
     match = re.search(
-        r"^[ \t]*(?:クエリー設計|クエリ設計|クエリー名[ \t]*[:：]|使用テーブル[ \t]*$)",
+        r"^[ \t]*[・-]?[ \t]*(?:クエリー設計|クエリ設計|クエリー名[ \t]*[:：]|使用テーブル[ \t]*(?:[:：]|$))",
         block, re.MULTILINE
     )
     return block[match.start():].strip() if match else ""
@@ -405,12 +431,19 @@ def split_assignment4(text: str) -> Dict[str, Dict]:
         re.MULTILINE
     )
 
-    if not assignment4_match:
-        return {}
-
-    target = text[
-        assignment4_match.start():
-    ]
+    if assignment4_match:
+        target = text[assignment4_match.start():]
+    else:
+        # 「課題4：企画クエリー」がない場合は、4-1～4-3の
+        # 見出しが順番に現れることを確認してから4-1を開始点にする。
+        headings = list(re.finditer(
+            r"(?m)^[ \t]*4[ \t]*[-－ー][ \t]*([1-3])[ \t]*[:：][ \t]*[^\n]+",
+            text,
+        ))
+        numbers = [m.group(1) for m in headings]
+        if numbers[:3] != ["1", "2", "3"]:
+            return {}
+        target = text[headings[0].start():]
 
     pattern = re.compile(
         r"^\s*4\s*[-－ー]\s*([1-3])\b",
@@ -437,6 +470,10 @@ def split_assignment4(text: str) -> Dict[str, Dict]:
         block = target[
             start:end
         ].strip()
+        # 末尾の記入用テンプレートを学生の回答に混ぜない。
+        template = re.search(r"(?m)^[ \t]*クエリー設計テンプレート[ \t]*$", block)
+        if template:
+            block = block[:template.start()].rstrip()
 
         lines = clean_lines(block)
 
