@@ -198,7 +198,7 @@ def split_assignment2(text: str) -> Dict[str, Dict]:
 
     # 課題4より前だけを対象にする
     assignment4_match = re.search(
-        r"^\s*課題\s*4\s*[:：]",
+        r"^[^\S\n]*課題[^\S\n]*4(?=[^\S\n]*[:：]|[^\S\n]+[^\n]|[^\S\n]*$)",
         text,
         re.MULTILINE
     )
@@ -246,37 +246,25 @@ def split_assignment2(text: str) -> Dict[str, Dict]:
 # ==================================================
 
 def extract_project_intent(block: str) -> str:
-    """
-    企画意図を取得する。
-    """
-
-    match = re.search(
-        r"企画意図\s*(.*?)\s*クエリー設計",
-        block,
-        re.DOTALL
-    )
-
+    """企画意図から、クエリー名・設計項目・SQL文の直前までを取得。"""
+    match = re.search(r"^[ \t]*企画意図[ \t]*[:：]?[ \t]*$", block, re.MULTILINE)
     if not match:
         return ""
-
-    return match.group(1).strip()
+    remainder = block[match.end():]
+    end = re.search(
+        r"^[ \t]*(?:クエリー設計|クエリ設計|クエリー名[ \t]*[:：]|使用テーブル[ \t]*$|SQL[ \t]*文[ \t]*$)",
+        remainder, re.MULTILINE
+    )
+    return (remainder[:end.start()] if end else remainder).strip()
 
 
 def extract_project_design(block: str) -> str:
-    """
-    クエリー設計以降を取得する。
-    """
-
+    """クエリー設計の見出しがなくてもクエリー名以降を取得。"""
     match = re.search(
-        r"クエリー設計\s*(.*)",
-        block,
-        re.DOTALL
+        r"^[ \t]*(?:クエリー設計|クエリ設計|クエリー名[ \t]*[:：]|使用テーブル[ \t]*$)",
+        block, re.MULTILINE
     )
-
-    if not match:
-        return ""
-
-    return match.group(1).strip()
+    return block[match.start():].strip() if match else ""
 
 
 def is_real_query_name(query_name: str) -> bool:
@@ -412,7 +400,7 @@ def split_assignment4(text: str) -> Dict[str, Dict]:
     text = normalize_text(text)
 
     assignment4_match = re.search(
-        r"^\s*課題\s*4\s*[:：]",
+        r"^[^\S\n]*課題[^\S\n]*4(?=[^\S\n]*[:：]|[^\S\n]+[^\n]|[^\S\n]*$)",
         text,
         re.MULTILINE
     )
@@ -464,7 +452,7 @@ def split_assignment4(text: str) -> Dict[str, Dict]:
 
         type_match = re.match(
             r"4\s*[-－ー]\s*[1-3]"
-            r"\s*[:：]\s*(.*)",
+            r"[^\S\n]*(?:[:：][^\S\n]*|[^\S\n]+)(.*)",
             first_line
         )
 
@@ -499,6 +487,8 @@ def split_assignment4(text: str) -> Dict[str, Dict]:
             intent,
             design_text
         )
+        if not answered and re.search(r"(?im)^\s*SELECT\s+\S+", block):
+            answered = True
 
         # ------------------------------------------
         # 回答ありなら構造化
