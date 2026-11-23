@@ -29,22 +29,36 @@ def result_files(result, parsed):
     return output.getvalue().encode('utf-8-sig'),'\n'.join(lines).encode('utf-8-sig')
 
 uploads=st.file_uploader('Wordレポートを選択（複数選択可）',type=['docx'],accept_multiple_files=True)
-if uploads and st.button('採点開始',type='primary'):
-    results={};errors={};progress=st.progress(0)
-    for i,upload in enumerate(uploads):
-        tmp=None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False,suffix='.docx') as f:
-                f.write(upload.getbuffer());tmp=f.name
-            parsed=split_week7_report(read_docx(tmp))
-            results[upload.name]=(grade_week7(parsed),parsed)
-        except Exception as exc:
-            errors[upload.name]=str(exc)
-        finally:
-            if tmp and os.path.exists(tmp):os.remove(tmp)
-            progress.progress((i+1)/len(uploads))
-    st.session_state['week7_results']=results
-    st.session_state['week7_errors']=errors
+if uploads and st.button('採点開始', type='primary'):
+    results = {}
+    errors = {}
+    progress = st.progress(0, text=f'採点準備中（0/{len(uploads)}件）')
+    with st.status('🔄 採点中です。しばらくお待ちください…', expanded=True) as status:
+        current_file = st.empty()
+        for i, upload in enumerate(uploads):
+            current_file.info(f'採点中：{upload.name}（{i + 1}/{len(uploads)}件）')
+            tmp = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as f:
+                    f.write(upload.getbuffer())
+                    tmp = f.name
+                parsed = split_week7_report(read_docx(tmp))
+                if not parsed.get('queries'):
+                    raise ValueError('問題1・2・3・5・6の回答を1件も抽出できませんでした。採点せず停止しました。Wordの見出し形式を確認してください。')
+                results[upload.name] = (grade_week7(parsed), parsed)
+            except Exception as exc:
+                errors[upload.name] = str(exc)
+            finally:
+                if tmp and os.path.exists(tmp):
+                    os.remove(tmp)
+                progress.progress((i + 1) / len(uploads), text=f'採点進捗：{i + 1}/{len(uploads)}件')
+        current_file.empty()
+        st.session_state['week7_results'] = results
+        st.session_state['week7_errors'] = errors
+        if errors:
+            status.update(label=f'⚠️ 採点処理が終了しました（成功：{len(results)}件／エラー：{len(errors)}件）', state='error', expanded=False)
+        else:
+            status.update(label=f'✅ 採点が完了しました！（{len(results)}件）', state='complete', expanded=False)
 
 for name,error in st.session_state.get('week7_errors',{}).items():
     st.error(f'{name}：{error}')
